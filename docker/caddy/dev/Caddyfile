@@ -1,0 +1,18 @@
+http://app.test, http://portal.app.test {
+    root * /var/www/public
+        encode gzip
+
+        php_fastcgi app:9000
+
+        file_server
+
+}
+
+http://web:80 {
+   root * /var/www/public
+
+       encode gzip
+       php_fastcgi app:9000
+
+       file_server
+}

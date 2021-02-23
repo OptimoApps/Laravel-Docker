@@ -1,0 +1,100 @@
+version: "3.7"
+services:
+  app:
+    build: ./docker/php/dev/
+    depends_on:
+      - mariadb
+      - redis
+    volumes:
+      - ./:/var/www/
+      - $HOME/.composer/:$HOME/.composer/
+    env_file:
+      - .env
+
+  web:
+    image: caddy/caddy:alpine
+    container_name: jobzly_caddy
+    volumes:
+      - ./docker/caddy/dev/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./:/var/www/
+      - caddy_data:/data
+    ports:
+      - 80:80
+      - 443:443
+    depends_on:
+      - app
+
+  mariadb:
+    image: mariadb:latest
+    volumes:
+      - mariadb:/var/lib/mysql
+    environment:
+      - "MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}"
+      - "MYSQL_DATABASE=${DB_DATABASE}"
+      - "MYSQL_USER=${DB_USERNAME}"
+      - "MYSQL_PASSWORD=${DB_PASSWORD}"
+    ports:
+      - 3306:3306
+    env_file:
+      - .env
+
+    #laravel cron
+  cron:
+    build: ./docker/crontab
+    container_name: jobzy_cron
+    volumes:
+      - ./:/var/www/
+    depends_on:
+      - app
+    environment:
+      - "BEANSTALKD_HOST=queue"
+      - "QUEUE_DRIVER=beanstalkd"
+    env_file:
+      - .env
+
+  #laravel worker
+  worker:
+    build: ./docker/worker
+    container_name: jobzly_worker
+    volumes:
+      - ./:/var/www/
+    depends_on:
+      - redis
+    env_file:
+      - .env
+
+  redis:
+    image: redis:5.0-alpine
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"
+    ports:
+      - 6379:6379
+    env_file:
+      - .env
+
+  echo:
+    build: ./docker/echo-server
+    ports:
+      - "6001:6001"
+    depends_on:
+      - app
+      - web
+    links:
+      - web
+      - redis
+    volumes:
+      - ./docker/echo-server/dev/laravel-echo-server.json:/app/laravel-echo-server.json:ro
+      - ./storage/certs:/app/storage/certs:ro
+
+  nodejs:
+    build: ./docker/nodejs
+    volumes:
+      - ./:/var/www/
+
+volumes:
+  mariadb:
+  caddy_data:
+
+networks:
+  default:
+    external:
+      name: caddy-proxy
